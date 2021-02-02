@@ -1,0 +1,90 @@
+#!/bin/bash -e
+#
+# S2I assemble script for the 'nodejs-fedora33' image.
+# The 'assemble' script builds your application source so that it is ready to run.
+#
+# For more information refer to the documentation:
+#	https://github.com/openshift/source-to-image/blob/master/docs/builder_image.md
+#
+
+# Restore artifacts from the previous build (if they exist).
+#
+if [ "$(ls /tmp/artifacts/ 2>/dev/null)" ]; then
+  echo "---> Restoring build artifacts..."
+  #shopt -s dotglob
+  #mv /tmp/artifacts/* ./
+  #shopt -u dotglob
+  shopt -s dotglob
+  mv -T --verbose /tmp/artifacts/node_modules "${HOME}/node_modules"
+  shopt -u dotglob
+fi
+
+echo "---> Installing application source..."
+cp -Rf /tmp/src/. ./
+
+fix-permissions ./
+
+# Change the npm registry mirror if provided
+if [ -n "$NPM_MIRROR" ]; then
+echo "check varialbe $NPM_MIRROR"
+npx npm-cli-login -u $NPM_USERNAME -p $NPM_PASSWORD -e $NPM_EMAIL -r $NPM_MIRROR
+fi
+
+# Set the DEV_MODE to false by default.
+if [ -z "$DEV_MODE" ]; then
+  export DEV_MODE=false
+fi
+
+# If NODE_ENV is not set by the user, then NODE_ENV is determined by whether
+# the container is run in development mode.
+if [ -z "$NODE_ENV" ]; then
+  if [ "$DEV_MODE" == true ]; then
+    export NODE_ENV=development
+  else
+    export NODE_ENV=production
+  fi
+fi
+
+	echo "---> Installing"
+	NODE_ENV=development npm ci
+
+	#do not fail when there is no build script
+	echo "---> Building in production mode"
+	npm run build --if-present
+
+# if [ "$NODE_ENV" != "production" ]; then
+
+# 	echo "---> Installing"
+# 	npm ci
+
+# else
+
+# 	echo "---> Installing all dependencies"
+# 	NODE_ENV=development npm install
+
+# 	#do not fail when there is no build script
+# 	echo "---> Building in production mode"
+# 	npm run build --if-present
+
+# 	echo "---> Pruning the development dependencies"
+# 	npm prune
+
+# 	# Clear the npm's cache and tmp directories only if they are not a docker volumes
+# 	NPM_CACHE=$(npm config get cache)
+# 	if ! mountpoint $NPM_CACHE; then
+# 		echo "---> Cleaning the npm cache $NPM_CACHE"
+# 		#As of npm@5 even the 'npm cache clean --force' does not fully remove the cache directory
+# 		# instead of $NPM_CACHE* use $NPM_CACHE/*.
+# 		# We do not want to delete .npmrc file.
+# 		rm -rf "${NPM_CACHE:?}/"
+# 	fi
+# 	NPM_TMP=$(npm config get tmp)
+# 	if ! mountpoint $NPM_TMP; then
+# 		echo "---> Cleaning the $NPM_TMP/npm-*"
+# 		rm -rf $NPM_TMP/npm-*
+# 	fi
+
+# fi
+
+# Fix source directory permissions
+fix-permissions ./
